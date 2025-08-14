@@ -1,0 +1,74 @@
+﻿# Flutter/Dart
+**/build/
+.dart_tool/
+.packages
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+.melos_tool/
+.coverage/
+# Keep pubspec.lock for apps
+# IDE
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+*.swp
+# Android
+**/android/.gradle/
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/key.properties
+**/android/**/build/
+# iOS
+**/ios/Pods/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/.symlinks/
+**/ios/Flutter/ephemeral/
+**/ios/Runner/GeneratedPluginRegistrant.*
+# macOS
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Flutter/ephemeral/
+**/macos/Pods/
+# Windows
+**/windows/flutter/ephemeral/
+**/windows/**/GeneratedPluginRegistrant.*
+# Web
+**/web/generated_plugin_registrant.dart
+# Xcode
+**/*.xcworkspace
+**/*.xcuserdatad/
+**/*.xcodeproj/project.xcworkspace
+# Other
+*.log
+*.tmp
+.DS_Store
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+.env.*
+*.env
+.envrc
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+# Flask
+instance/
+*.db
+*.sqlite
+*.sqlite3
