@@ -324,4 +324,15 @@ class BankAccountService extends ChangeNotifier {
       return null;
     }
   }
+
+  // Refresh account balances after transactions
+  Future<void> refreshAccountBalances() async {
+    try {
+      _logger.info('Refreshing account balances');
+      await initialize(); // Re-fetch all accounts to get updated balances
+    } catch (e) {
+      _logger.severe('Error refreshing account balances', e);
+      // Don't rethrow - this is a background refresh
+    }
+  }
 }

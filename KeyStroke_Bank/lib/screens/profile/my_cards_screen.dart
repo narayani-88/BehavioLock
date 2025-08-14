@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/card_service.dart';
+import '../../models/card_model.dart';
 import 'add_card_screen.dart';
+import 'card_withdrawal_screen.dart';
+import 'add_money_to_card_screen.dart';
 
 class MyCardsScreen extends StatefulWidget {
   const MyCardsScreen({super.key});
@@ -22,16 +25,7 @@ class _MyCardsScreenState extends State<MyCardsScreen> {
   @override
   Widget build(BuildContext context) {
     final cardService = context.watch<CardService>();
-    final cards = cardService.cards
-        .map((c) => _CardData(
-              type: c.type,
-              network: c.network,
-              digits: c.last4,
-              holder: c.holder,
-              month: c.month,
-              year: c.year,
-            ))
-        .toList();
+    final cards = cardService.cards;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Saved Cards')),
@@ -43,7 +37,7 @@ class _MyCardsScreenState extends State<MyCardsScreen> {
               padding: EdgeInsets.symmetric(vertical: 32),
               child: Center(child: Text('No cards yet')),
             ),
-          for (final c in cards) _GlassCard(data: c),
+          for (final card in cards) _GlassCard(card: card),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -80,30 +74,15 @@ class _MyCardsScreenState extends State<MyCardsScreen> {
   }
 }
 
-class _CardData {
-  final String type; // Debit, Credit, Forex
-  final String network; // Visa, Mastercard
-  final String digits; // last 4
-  final String holder;
-  final String month;
-  final String year; // yy
-  const _CardData({
-    required this.type,
-    required this.network,
-    required this.digits,
-    required this.holder,
-    required this.month,
-    required this.year,
-  });
-}
+
 
 class _GlassCard extends StatelessWidget {
-  final _CardData data;
-  const _GlassCard({required this.data});
+  final CardModel card;
+  const _GlassCard({required this.card});
 
   @override
   Widget build(BuildContext context) {
-    final gradient = data.network == 'Visa'
+    final gradient = card.network == 'Visa'
         ? const LinearGradient(colors: [Color(0xFF6A5AE0), Color(0xFF6CC6FF)])
         : const LinearGradient(colors: [Color(0xFFFF8A65), Color(0xFFFFB74D)]);
     return Container(
@@ -128,29 +107,40 @@ class _GlassCard extends StatelessWidget {
             children: [
               const Icon(Icons.sim_card, color: Colors.white),
               Text(
-                '${data.network.toUpperCase()} • ${data.type.toUpperCase()}',
+                '${card.network.toUpperCase()} • ${card.type.toUpperCase()}',
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 16),
           Text(
-            '5128 6701 0095 ${data.digits}',
+            card.maskedNumber,
             style: const TextStyle(color: Colors.white, fontSize: 20, letterSpacing: 1.2),
           ),
           const SizedBox(height: 12),
           Text(
-            data.holder.toUpperCase(),
+            card.holder.toUpperCase(),
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              _chip('VALID', '${data.month}/${data.year}'),
-              const Spacer(),
-              _DeleteButton(data: data),
-            ],
-          ),
+                     Row(
+                       children: [
+                         _chip('VALID', '${card.month}/${card.year}'),
+                         const Spacer(),
+                         _chip('BALANCE', card.formattedBalance),
+                       ],
+                     ),
+                     const SizedBox(height: 8),
+                     Row(
+                       mainAxisAlignment: MainAxisAlignment.end,
+                       children: [
+                         _AddMoneyButton(card: card),
+                         const SizedBox(width: 4),
+                         _WithdrawButton(card: card),
+                         const SizedBox(width: 4),
+                         _DeleteButton(card: card),
+                       ],
+                     ),
         ],
       ),
     );
@@ -158,30 +148,80 @@ class _GlassCard extends StatelessWidget {
 
   Widget _chip(String label, String value) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
       ),
-    child: Row(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-          const SizedBox(width: 6),
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+          const SizedBox(width: 4),
+          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 10)),
         ],
       ),
     );
   }
 }
 
+class _AddMoneyButton extends StatelessWidget {
+  final CardModel card;
+  const _AddMoneyButton({required this.card});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.add_circle_outline, color: Colors.white),
+      iconSize: 20,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      onPressed: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AddMoneyToCardScreen(card: card),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WithdrawButton extends StatelessWidget {
+  final CardModel card;
+  const _WithdrawButton({required this.card});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.account_balance_wallet, color: Colors.white),
+      iconSize: 20,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      onPressed: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CardWithdrawalScreen(card: card),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _DeleteButton extends StatelessWidget {
-  final _CardData data;
-  const _DeleteButton({required this.data});
+  final CardModel card;
+  const _DeleteButton({required this.card});
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
       icon: const Icon(Icons.delete_outline, color: Colors.white),
+      iconSize: 20,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
       onPressed: () async {
         // Capture service before async gap
         final service = context.read<CardService>();
@@ -189,7 +229,7 @@ class _DeleteButton extends StatelessWidget {
           context: context,
           builder: (_) => AlertDialog(
             title: const Text('Remove card?'),
-            content: Text('Delete ${data.network} •••• ${data.digits}?'),
+            content: Text('Delete ${card.network} •••• ${card.last4}?'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
               TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
@@ -198,12 +238,7 @@ class _DeleteButton extends StatelessWidget {
         );
         if (confirmed != true) return;
         if (!context.mounted) return;
-        // Find card by matching ends/holder/type; in real backend we'd use id.
-        final matches = service.cards.where(
-          (c) => c.last4 == data.digits && c.holder == data.holder && c.network == data.network,
-        );
-        if (matches.isEmpty) return;
-        await service.removeCard(matches.first.id);
+        await service.removeCard(card.id);
       },
     );
   }

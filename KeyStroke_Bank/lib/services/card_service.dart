@@ -29,33 +29,22 @@ class CardService extends ChangeNotifier {
     final user = _auth.currentUser;
     if (user == null) return;
     
-    try {
-      // Try to load from backend first
-      final response = await _api.get('/cards');
-      if (response != null) {
-        final List<dynamic> backendCards = response is List ? response : [];
-        _cards.clear();
-        _cards.addAll(backendCards.map((data) => CardModel.fromMap(Map<String, dynamic>.from(data))));
-        
-        // Save to local storage as backup
-        await _saveAll();
-        notifyListeners();
-        return;
-      }
-    } catch (e) {
-      // If backend fails, fall back to local storage
-      if (kDebugMode) {
-        print('Failed to load cards from backend: $e');
-      }
-    }
-    
-    // Fallback to local storage
+    // Since there's no backend, load directly from local storage
     final prefs = await SharedPreferences.getInstance();
     final key = _prefsKey(user.id);
     final list = prefs.getStringList(key) ?? <String>[];
-    _cards
-      ..clear()
-      ..addAll(list.map((s) => CardModel.fromJson(s)));
+    
+    _cards.clear();
+    for (final jsonString in list) {
+      try {
+        final card = CardModel.fromJson(jsonString);
+        _cards.add(card);
+      } catch (e) {
+        if (kDebugMode) {
+          print('Failed to parse card from JSON: $e');
+        }
+      }
+    }
     notifyListeners();
   }
 
@@ -66,6 +55,7 @@ class CardService extends ChangeNotifier {
     required String holder,
     required String month,
     required String year,
+    double initialBalance = 0.0,
   }) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception('Not authenticated');
@@ -79,55 +69,33 @@ class CardService extends ChangeNotifier {
       holder: holder,
       month: month,
       year: year.substring(2),
+      balance: initialBalance,
       createdAt: DateTime.now(),
     );
 
-    try {
-      // Persist to backend
-      await _api.post('/cards', data: card.toMap());
-      
-      // Add to local cache on success
-      _cards.add(card);
-      await _saveAll();
-      notifyListeners();
-      return card;
-    } catch (e) {
-      // If backend fails, still save locally for offline functionality
-      _cards.add(card);
-      await _saveAll();
-      notifyListeners();
-      
-      // Log the error but don't fail the operation
-      if (kDebugMode) {
-        print('Backend persistence failed for card ${card.id}: $e');
-      }
-      
-      return card;
+    // Since there's no backend, save directly to local storage
+    _cards.add(card);
+    await _saveAll();
+    notifyListeners();
+    
+    if (kDebugMode) {
+      print('Card saved locally: ${card.id}');
     }
+    
+    return card;
   }
 
   Future<void> removeCard(String id) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception('Not authenticated');
     
-    try {
-      // Delete from backend first
-      await _api.delete('/cards/$id');
-      
-      // Remove from local cache on success
-      _cards.removeWhere((c) => c.id == id);
-      await _saveAll();
-      notifyListeners();
-    } catch (e) {
-      // If backend fails, still remove locally for offline functionality
-      _cards.removeWhere((c) => c.id == id);
-      await _saveAll();
-      notifyListeners();
-      
-      // Log the error but don't fail the operation
-      if (kDebugMode) {
-        print('Backend deletion failed for card $id: $e');
-      }
+    // Since there's no backend, remove directly from local storage
+    _cards.removeWhere((c) => c.id == id);
+    await _saveAll();
+    notifyListeners();
+    
+    if (kDebugMode) {
+      print('Card removed locally: $id');
     }
   }
 
@@ -135,29 +103,15 @@ class CardService extends ChangeNotifier {
     final user = _auth.currentUser;
     if (user == null) throw Exception('Not authenticated');
     
-    try {
-      // Update in backend first
-      await _api.put('/cards/${card.id}', data: card.toMap());
+    // Since there's no backend, update directly in local storage
+    final index = _cards.indexWhere((c) => c.id == card.id);
+    if (index != -1) {
+      _cards[index] = card;
+      await _saveAll();
+      notifyListeners();
       
-      // Update local cache on success
-      final index = _cards.indexWhere((c) => c.id == card.id);
-      if (index != -1) {
-        _cards[index] = card;
-        await _saveAll();
-        notifyListeners();
-      }
-    } catch (e) {
-      // If backend fails, still update locally for offline functionality
-      final index = _cards.indexWhere((c) => c.id == card.id);
-      if (index != -1) {
-        _cards[index] = card;
-        await _saveAll();
-        notifyListeners();
-      }
-      
-      // Log the error but don't fail the operation
       if (kDebugMode) {
-        print('Backend update failed for card ${card.id}: $e');
+        print('Card updated locally: ${card.id}');
       }
     }
   }
@@ -172,41 +126,7 @@ class CardService extends ChangeNotifier {
 
   String _prefsKey(String userId) => 'cards.$userId';
 
-  /// Syncs local changes with the backend
-  Future<void> syncWithBackend() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-    
-    try {
-      // Get the latest cards from backend
-      final response = await _api.get('/cards');
-      if (response != null) {
-        final List<dynamic> backendCards = response is List ? response : [];
-        final backendCardIds = backendCards.map((data) => data['id'] as String).toSet();
-        
-        // Find cards that exist locally but not on backend (need to be created)
-        final cardsToCreate = _cards.where((card) => !backendCardIds.contains(card.id)).toList();
-        
-        // Create missing cards on backend
-        for (final card in cardsToCreate) {
-          try {
-            await _api.post('/cards', data: card.toMap());
-          } catch (e) {
-            if (kDebugMode) {
-              print('Failed to sync card ${card.id} to backend: $e');
-            }
-          }
-        }
-        
-        // Reload cards from backend to ensure consistency
-        await loadCards();
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Failed to sync with backend: $e');
-      }
-    }
-  }
+
 
   /// Gets a card by ID
   CardModel? getCardById(String id) {
@@ -225,6 +145,65 @@ class CardService extends ChangeNotifier {
   /// Gets cards by network
   List<CardModel> getCardsByNetwork(String network) {
     return _cards.where((card) => card.network.toLowerCase() == network.toLowerCase()).toList();
+  }
+
+  /// Add money to card balance
+  Future<bool> addBalance(String cardId, double amount) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Not authenticated');
+
+    final index = _cards.indexWhere((card) => card.id == cardId);
+    if (index == -1) throw Exception('Card not found');
+
+    if (amount <= 0) throw Exception('Amount must be positive');
+
+    final updatedCard = _cards[index].copyWith(balance: _cards[index].balance + amount);
+    _cards[index] = updatedCard;
+    await _saveAll();
+    notifyListeners();
+
+    if (kDebugMode) {
+      print('Added ₹${amount.toStringAsFixed(2)} to card $cardId. New balance: ${updatedCard.formattedBalance}');
+    }
+
+    return true;
+  }
+
+  /// Withdraw money from card balance
+  Future<bool> withdrawFromCard(String cardId, double amount) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Not authenticated');
+
+    final index = _cards.indexWhere((card) => card.id == cardId);
+    if (index == -1) throw Exception('Card not found');
+
+    if (amount <= 0) throw Exception('Amount must be positive');
+
+    final card = _cards[index];
+    if (!card.hasSufficientBalance(amount)) {
+      throw Exception('Insufficient balance. Available: ${card.formattedBalance}, Required: ₹${amount.toStringAsFixed(2)}');
+    }
+
+    final updatedCard = card.copyWith(balance: card.balance - amount);
+    _cards[index] = updatedCard;
+    await _saveAll();
+    notifyListeners();
+
+    if (kDebugMode) {
+      print('Withdrew ₹${amount.toStringAsFixed(2)} from card $cardId. New balance: ${updatedCard.formattedBalance}');
+    }
+
+    return true;
+  }
+
+  /// Get total balance across all cards
+  double getTotalCardBalance() {
+    return _cards.fold(0.0, (sum, card) => sum + card.balance);
+  }
+
+  /// Get cards with sufficient balance for a transaction
+  List<CardModel> getCardsWithSufficientBalance(double amount) {
+    return _cards.where((card) => card.hasSufficientBalance(amount)).toList();
   }
 }
 

@@ -46,12 +46,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (success) {
-        // Navigate to dashboard on successful login
-        if (!mounted) return;
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          '/dashboard',
-          (route) => false, // Remove all previous routes
-        );
+        // Login successful - AuthWrapper will automatically show dashboard
+        // No navigation needed as the app will rebuild and show dashboard
       } else {
         // Show error message if login fails
         _showErrorSnackBar(authService.error);

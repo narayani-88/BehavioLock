@@ -161,7 +161,7 @@ class KetStrokeBankApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       home: const AuthWrapper(),
       routes: {
-        // Add other routes if needed
+        // Routes are handled by AuthWrapper
       },
     );
   }

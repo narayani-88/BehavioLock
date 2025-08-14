@@ -20,8 +20,8 @@ class TransactionService with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   
-  TransactionService(this._apiService, {BankAccountService? bankAccountService}) 
-      : _bankAccountService = bankAccountService ?? BankAccountService(apiService: _apiService);
+  TransactionService(this._apiService, {required BankAccountService bankAccountService}) 
+      : _bankAccountService = bankAccountService;
   
   /// Clear any error messages
   void clearError() {
@@ -107,13 +107,7 @@ class TransactionService with ChangeNotifier {
     }
   }
 
-  /// Format balance for display
-  String formatBalance(double balance) {
-    if (balance < 0) {
-      return '-\$${balance.abs().toStringAsFixed(2)}';
-    }
-    return '\$${balance.toStringAsFixed(2)}';
-  }
+
 
   /// Check if a transaction amount is valid
   bool isValidTransactionAmount(double amount) {
@@ -127,7 +121,7 @@ class TransactionService with ChangeNotifier {
         (acc) => acc.id == accountId,
         orElse: () => throw Exception('Account not found'),
       );
-      return '${account.accountNumber} (${formatBalance(account.balance)})';
+      return '${account.accountNumber} (₹${account.balance.toStringAsFixed(2)})';
     } catch (e) {
       return 'Account not found';
     }
@@ -199,6 +193,8 @@ class TransactionService with ChangeNotifier {
           _error = 'Insufficient funds: $msg';
         } else {
           _error = msg;
+
+          
         }
         
         throw Exception(_error);
@@ -213,6 +209,10 @@ class TransactionService with ChangeNotifier {
       
       final newTransaction = TransactionModel.fromMap(map);
       _transactions.insert(0, newTransaction);
+      
+      // Refresh account balances to reflect the transaction
+      await _bankAccountService.refreshAccountBalances();
+      
       _logger.info('Transaction added: ${newTransaction.id}');
       return true;
     } catch (e, st) {
@@ -300,6 +300,9 @@ class TransactionService with ChangeNotifier {
       
       final newTransaction = TransactionModel.fromMap(map);
       _transactions.insert(0, newTransaction);
+      
+      // Refresh account balances to reflect the transfer
+      await _bankAccountService.refreshAccountBalances();
       
       _logger.info('Transfer completed: ${newTransaction.id}');
       return newTransaction;
