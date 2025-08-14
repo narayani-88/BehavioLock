@@ -6,11 +6,14 @@ import '../../services/profile_service.dart';
 
 import '../../../models/transaction_model.dart';
 import '../../../models/bank_account_model.dart';
+import '../../../models/card_model.dart';
 import '../../../services/transaction_service.dart';
 import '../../../services/bank_account_service.dart';
+import '../../../services/card_service.dart';
 import '../../../theme/app_colors.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/api_service.dart';
+import '../../../screens/profile/add_card_screen.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   final String? accountId;
@@ -39,10 +42,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final TextEditingController _recipientController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   int _selectedPaymentMethod = 0;
-  final List<Map<String, String>> _paymentMethods = const [
-    {'brand': 'Visa', 'digits': '8304'},
-    {'brand': 'Paypal', 'digits': '8304'},
-  ];
 
   // Recipient selection (for transfers)
   String? _selectedRecipientUserId;
@@ -51,6 +50,9 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   List<BankAccount> _recipientAccounts = [];
   bool _loadingRecipients = false;
   bool _loadingRecipientAccounts = false;
+  
+  // User cards for payment methods
+  List<CardModel> _userCards = [];
   
   bool isLoading = true;
   bool isSubmitting = false;
@@ -101,6 +103,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       _emailController.text = auth.currentUser?.email ?? '';
     });
     _loadAccounts();
+    _loadUserCards();
   }
 
   Future<void> _loadAccounts() async {
@@ -172,6 +175,29 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                 _loadAccounts();
               },
             ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadUserCards() async {
+    try {
+      final cardService = Provider.of<CardService>(context, listen: false);
+      await cardService.initialize();
+      
+      if (mounted) {
+        setState(() {
+          _userCards = cardService.cards.toList();
+        });
+      }
+    } catch (e) {
+      _logger.severe('Failed to load user cards', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load cards: $e'),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -906,65 +932,166 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               ),
             ),
             TextButton(
-              onPressed: () {},
+              onPressed: () => _navigateToAddCard(context),
               child: const Text('+ Add new'),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        Row(
-          children: List.generate(_paymentMethods.length, (index) {
-            final pm = _paymentMethods[index];
-            final selected = _selectedPaymentMethod == index;
-            return Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: index == 0 ? 12 : 0, left: index == 1 ? 12 : 0),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => setState(() => _selectedPaymentMethod = index),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: theme.cardColor,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: selected ? AppColors.primary : theme.dividerColor,
-                        width: selected ? 1.5 : 1,
-                      ),
-                    ),
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
+        _buildUserCards(theme),
+      ],
+    );
+  }
+
+  Widget _buildUserCards(ThemeData theme) {
+    if (_userCards.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: theme.dividerColor),
+        ),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.credit_card_outlined, size: 48, color: theme.hintColor),
+              const SizedBox(height: 8),
+              Text(
+                'No cards available',
+                style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => _navigateToAddCard(context),
+                child: const Text('Add your first card'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: _userCards.asMap().entries.map((entry) {
+        final index = entry.key;
+        final card = entry.value;
+        final selected = _selectedPaymentMethod == index;
+        
+        return Padding(
+          padding: EdgeInsets.only(bottom: index < _userCards.length - 1 ? 12 : 0),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => setState(() => _selectedPaymentMethod = index),
+            child: Container(
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: selected ? AppColors.primary : theme.dividerColor,
+                  width: selected ? 1.5 : 1,
+                ),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(
+                    selected ? Icons.radio_button_checked : Icons.radio_button_off,
+                    color: selected ? AppColors.primary : theme.hintColor,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          selected ? Icons.radio_button_checked : Icons.radio_button_off,
-                          color: selected ? AppColors.primary : theme.hintColor,
+                        Row(
+                          children: [
+                            Text(
+                              '•••• ${card.last4}',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: Colors.black,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _getCardTypeColor(card.type).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                card.type.toUpperCase(),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: _getCardTypeColor(card.type),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '•••• ${pm['digits']}',
-                                style: theme.textTheme.titleMedium?.copyWith(color: Colors.black),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                pm['brand'] ?? '',
-                                style: theme.textTheme.bodySmall?.copyWith(color: Colors.black),
-                              ),
-                            ],
+                        const SizedBox(height: 4),
+                        Text(
+                          '${card.network} • ${card.holder}',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Balance: ${card.formattedBalance}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.green,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        TextButton(onPressed: () {}, child: const Text('Edit')),
                       ],
                     ),
                   ),
-                ),
+                  IconButton(
+                    onPressed: () => _navigateToEditCard(context, card),
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    tooltip: 'Edit card',
+                  ),
+                ],
               ),
-            );
-          }),
-        ),
-      ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Color _getCardTypeColor(String type) {
+    switch (type.toLowerCase()) {
+      case 'credit':
+        return Colors.orange;
+      case 'forex':
+        return Colors.purple;
+      case 'debit':
+      default:
+        return Colors.blue;
+    }
+  }
+
+  void _navigateToAddCard(BuildContext context) {
+    // Navigate directly using MaterialPageRoute for now to avoid routing issues
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AddCardScreen(),
+      ),
+    ).then((_) {
+      // Refresh cards when returning from add card screen
+      _loadUserCards();
+    });
+  }
+
+  void _navigateToEditCard(BuildContext context, CardModel card) {
+    // Navigate to edit card screen or show card details
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Edit ${card.type} card ending in ${card.last4}'),
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 

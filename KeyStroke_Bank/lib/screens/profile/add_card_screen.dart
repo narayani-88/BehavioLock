@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../../services/auth_service.dart';
 import '../../services/settings_service.dart';
+import '../../services/bank_account_service.dart';
+import '../../services/card_service.dart';
 
 class AddCardResult {
   final String brand;
@@ -54,11 +56,48 @@ class _AddCardScreenState extends State<AddCardScreen>
   final _creditFormKey = GlobalKey<FormState>();
   final _forexFormKey = GlobalKey<FormState>();
 
+  // Account balance tracking
+  double _totalAccountBalance = 0.0;
+  bool _isLoadingBalance = true;
+  static const double _premiumCardThreshold = 100000.0; // 1 Lakh rupees
+
   @override
   void initState() {
     super.initState();
     final auth = Provider.of<AuthService>(context, listen: false);
     _name.text = auth.currentUser?.name ?? '';
+    _loadAccountBalance();
+  }
+
+  Future<void> _loadAccountBalance() async {
+    // Store context before async operations
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    
+    try {
+      setState(() => _isLoadingBalance = true);
+      
+      final accountService = Provider.of<BankAccountService>(context, listen: false);
+      await accountService.initialize();
+      
+      if (mounted) {
+        final totalBalance = accountService.accounts.fold<double>(
+          0.0, 
+          (sum, account) => sum + account.balance
+        );
+        
+        setState(() {
+          _totalAccountBalance = totalBalance;
+          _isLoadingBalance = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingBalance = false);
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Failed to load account balance: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -84,11 +123,102 @@ class _AddCardScreenState extends State<AddCardScreen>
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Add New Card'),
-          bottom: const TabBar(
+          actions: [
+            if (!_isLoadingBalance)
+              Container(
+                margin: const EdgeInsets.only(right: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.green.shade200),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.account_balance_wallet,
+                      size: 16,
+                      color: Colors.green.shade700,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '₹${_totalAccountBalance.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        color: Colors.green.shade700,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+                     bottom: TabBar(
+             isScrollable: true,
             tabs: [
-              Tab(text: 'DEBIT CARD'),
-              Tab(text: 'CREDIT CARD'),
-              Tab(text: 'FOREX CARD'),
+                             Tab(
+                 child: Container(
+                   constraints: const BoxConstraints(maxWidth: 120),
+                   child: const Text(
+                     'DEBIT CARD',
+                     textAlign: TextAlign.center,
+                     style: TextStyle(fontSize: 12),
+                   ),
+                 ),
+               ),
+                             Tab(
+                 child: Container(
+                   constraints: const BoxConstraints(maxWidth: 120),
+                   child: Row(
+                     mainAxisAlignment: MainAxisAlignment.center,
+                     mainAxisSize: MainAxisSize.min,
+                     children: [
+                       Flexible(
+                         child: Text(
+                           'CREDIT CARD',
+                           overflow: TextOverflow.ellipsis,
+                           style: const TextStyle(fontSize: 12),
+                         ),
+                       ),
+                       if (_totalAccountBalance < _premiumCardThreshold) ...[
+                         const SizedBox(width: 2),
+                         Icon(
+                           Icons.lock,
+                           size: 14,
+                           color: Colors.orange.shade700,
+                         ),
+                       ],
+                     ],
+                   ),
+                 ),
+               ),
+               Tab(
+                 child: Container(
+                   constraints: const BoxConstraints(maxWidth: 120),
+                   child: Row(
+                     mainAxisAlignment: MainAxisAlignment.center,
+                     mainAxisSize: MainAxisSize.min,
+                     children: [
+                       Flexible(
+                         child: Text(
+                           'FOREX CARD',
+                           overflow: TextOverflow.ellipsis,
+                           style: const TextStyle(fontSize: 12),
+                         ),
+                       ),
+                       if (_totalAccountBalance < _premiumCardThreshold) ...[
+                         const SizedBox(width: 2),
+                         Icon(
+                           Icons.lock,
+                           size: 14,
+                           color: Colors.orange.shade700,
+                         ),
+                       ],
+                     ],
+                   ),
+                 ),
+               ),
             ],
           ),
         ),
@@ -96,8 +226,8 @@ class _AddCardScreenState extends State<AddCardScreen>
           physics: const NeverScrollableScrollPhysics(),
           children: [
             _buildForm(context, months, years, 'Debit', _debitFormKey),
-            _buildForm(context, months, years, 'Credit', _creditFormKey),
-            _buildForm(context, months, years, 'Forex', _forexFormKey),
+            _buildPremiumCardForm(context, months, years, 'Credit', _creditFormKey, 'Credit Card'),
+            _buildPremiumCardForm(context, months, years, 'Forex', _forexFormKey, 'Forex Card'),
           ],
         ),
       ),
@@ -234,6 +364,98 @@ class _AddCardScreenState extends State<AddCardScreen>
     );
   }
 
+  Widget _buildPremiumCardForm(
+    BuildContext context,
+    List<String> months,
+    List<String> years,
+    String type,
+    GlobalKey<FormState> formKey,
+    String cardTypeName,
+  ) {
+    // Check if user has sufficient balance for premium cards
+    if (_totalAccountBalance < _premiumCardThreshold) {
+      return _buildPremiumCardLocked(context, cardTypeName);
+    }
+
+    // If unlocked, show the normal form
+    return _buildForm(context, months, years, type, formKey);
+  }
+
+  Widget _buildPremiumCardLocked(BuildContext context, String cardTypeName) {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.lock_outline,
+            size: 80,
+            color: Colors.orange.shade400,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            '$cardTypeName Locked',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Colors.orange.shade700,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'You need a minimum balance of ₹1,00,000 to unlock $cardTypeName features.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  'Current Total Balance',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.orange.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '₹${_totalAccountBalance.toStringAsFixed(2)}',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Colors.orange.shade700,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Required: ₹1,00,000',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.orange.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Add more money to your accounts to unlock premium card features!',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.grey.shade500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _groupField(TextEditingController c, List<TextInputFormatter> fmt,
       {VoidCallback? onFilled}) {
     return Expanded(
@@ -257,42 +479,82 @@ class _AddCardScreenState extends State<AddCardScreen>
     FocusScope.of(context).nextFocus();
   }
 
-  void _submit(BuildContext context, String type) {
+  Future<void> _submit(BuildContext context, String type) async {
     final formKey = switch (type) {
       'Debit' => _debitFormKey,
       'Credit' => _creditFormKey,
       _ => _forexFormKey,
     };
     if (!formKey.currentState!.validate()) return;
-    final brand = _inferBrand(_g1.text);
-    final result = AddCardResult(
-      brand: brand,
-      numberGroup1: _g1.text,
-      numberGroup2: _g2.text,
-      numberGroup3: _g3.text,
-      numberGroup4: _g4.text,
-      holderName: _name.text.trim(),
-      month: _month!,
-      year: _year!,
-      type: type,
-      network: _network.isNotEmpty ? _network : brand,
-    );
-    Navigator.pop(context, result);
-  }
-
-  String _inferBrand(String g1) {
-    if (g1.isEmpty) return 'Card';
-    switch (g1[0]) {
-      case '4':
-        return 'Visa';
-      case '5':
-        return 'Mastercard';
-      case '3':
-        return 'Amex';
-      default:
-        return 'Card';
+    
+    // Store context and mounted state before async operations
+    final navigatorContext = context;
+    final scaffoldMessenger = ScaffoldMessenger.of(navigatorContext);
+    
+    try {
+      // Show loading indicator
+      showDialog(
+        context: navigatorContext,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+      
+      // Get the card service and add the card
+      final cardService = Provider.of<CardService>(navigatorContext, listen: false);
+      
+      await cardService.addCard(
+        type: type,
+        network: _network,
+        numberGroup4: _g4.text,
+        holder: _name.text.trim(),
+        month: _month!,
+        year: _year!,
+        initialBalance: 0.0,
+      );
+      
+      // Close loading dialog
+      if (mounted) {
+        Navigator.pop(navigatorContext); // Close loading dialog
+      }
+      
+      // Show success message
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('$type card added successfully!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      // Navigate to my cards page
+      if (mounted) {
+        Navigator.pushReplacementNamed(navigatorContext, '/my-cards');
+      }
+      
+    } catch (e) {
+      // Close loading dialog
+      if (mounted) {
+        Navigator.pop(navigatorContext); // Close loading dialog
+      }
+      
+      // Show error message
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: Text('Failed to add card: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
+
+
 
   // Derive network options from SettingsService toggles
   List<_Option> _networkOptions(BuildContext context) {

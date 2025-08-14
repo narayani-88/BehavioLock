@@ -9,6 +9,8 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/signup_screen.dart';
 import 'screens/auth/forgot_password_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
+import 'screens/profile/add_card_screen.dart';
+import 'screens/profile/my_cards_screen.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'services/transaction_service.dart';
@@ -161,7 +163,8 @@ class KetStrokeBankApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       home: const AuthWrapper(),
       routes: {
-        // Routes are handled by AuthWrapper
+        '/add-card': (context) => const AddCardScreen(),
+        '/my-cards': (context) => const MyCardsScreen(),
       },
     );
   }
