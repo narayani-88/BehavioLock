@@ -9,7 +9,7 @@ class SettingsService extends ChangeNotifier {
 
   // Canonical orders for display
   static const List<String> _allNetworks = <String>[
-    'Visa', 'Mastercard', 'Amex', 'Discover', 'RuPay', 'UnionPay',
+    'Visa', 'Mastercard', 'Amex', 'Discover', 'RuPay', 'UnionPay', 'PayPal',
   ];
   static const List<String> _allTypes = <String>['Debit', 'Credit', 'Forex'];
 

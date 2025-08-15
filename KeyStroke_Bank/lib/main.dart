@@ -1,6 +1,5 @@
 import 'dart:developer' as developer;
 import 'dart:ui';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +18,7 @@ import 'services/card_service.dart';
 import 'services/settings_service.dart';
 import 'services/profile_service.dart';
 import 'constants/app_theme.dart';
+import 'config/api_config.dart';
 
 void _setupLogging() {
   // Configure logging
@@ -40,23 +40,26 @@ void _setupLogging() {
     if (details.exception.toString().contains('HardwareKeyboard') ||
         details.exception.toString().contains('KeyUpEvent') ||
         details.exception.toString().contains('_pressedKeys.containsKey')) {
-      
       Logger('KeyboardError').warning(
         'Keyboard event error detected: ${details.exception}',
         details.exception,
         details.stack,
       );
-      
+
       // Try to recover by syncing keyboard state
       try {
         HardwareKeyboard.instance.syncKeyboardState();
-        Logger('KeyboardError').info('Keyboard state resynchronized after error');
+        Logger(
+          'KeyboardError',
+        ).info('Keyboard state resynchronized after error');
       } catch (e) {
-        Logger('KeyboardError').severe('Failed to resynchronize keyboard state: $e');
+        Logger(
+          'KeyboardError',
+        ).severe('Failed to resynchronize keyboard state: $e');
       }
       return;
     }
-    
+
     Logger('FlutterError').severe(
       'Uncaught error: ${details.exception}',
       details.exception,
@@ -95,33 +98,47 @@ void main() async {
   logger.info('Starting KetStroke Bank App');
 
   try {
-    // Determine base URL based on platform
-    final String baseUrl = kIsWeb 
-        ? ''  // For web, use empty string to let proxy handle the routing
-        : 'http://10.0.2.2:5000';  // For Android emulator
-    
-    if (kIsWeb) {
-      logger.info('Running in web mode with relative URLs');
-    } else {
-      logger.info('Running in native mode with base URL: $baseUrl');
-    }
-    
+    // Get base URL from configuration
+    final String baseUrl = ApiConfig.baseUrl;
+
+    logger.info(
+      'Platform: ${ApiConfig.isWeb
+          ? "Web"
+          : ApiConfig.isAndroid
+          ? "Android"
+          : "iOS"}',
+    );
+    logger.info('Base URL: $baseUrl');
+
     // Create services
     final authService = AuthService(
       apiService: ApiService(baseUrl: baseUrl, authService: null),
     );
-    
-    final apiService = ApiService(
-      baseUrl: baseUrl,
-      authService: authService,
-    );
-    
+
+    final apiService = ApiService(baseUrl: baseUrl, authService: authService);
+
     // Update the auth service's apiService reference
     authService.updateApiService(apiService);
-    
-    // Initialize other services
+
+    // Initialize auth service first and wait for it to complete
+    await authService.initAuthService();
+
+    // Only initialize other services if user is authenticated
     final bankAccountService = BankAccountService(apiService: apiService);
-    final transactionService = TransactionService(apiService, bankAccountService: bankAccountService);
+    final transactionService = TransactionService(
+      apiService,
+      bankAccountService: bankAccountService,
+    );
+
+    // If user is authenticated, initialize services
+    if (authService.isAuthenticated) {
+      logger.info('User is authenticated, initializing services');
+      // Don't initialize services here - let them initialize when needed
+    } else {
+      logger.info(
+        'User is not authenticated, services will work in offline mode',
+      );
+    }
 
     // Create the app with all providers
     runApp(
@@ -131,9 +148,18 @@ void main() async {
           ChangeNotifierProvider.value(value: authService),
           ChangeNotifierProvider.value(value: transactionService),
           ChangeNotifierProvider.value(value: bankAccountService),
-          ChangeNotifierProvider(create: (_) => CardService(apiService: apiService, authService: authService)),
-          ChangeNotifierProvider(create: (_) => SettingsService()..initialize()),
-          ChangeNotifierProvider(create: (_) => ProfileService(authService: authService)..initialize()),
+          ChangeNotifierProvider(
+            create: (_) =>
+                CardService(apiService: apiService, authService: authService),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => SettingsService()..initialize(),
+          ),
+          ChangeNotifierProvider(
+            create: (_) =>
+                ProfileService(authService: authService, apiService: apiService)
+                  ..initialize(),
+          ),
         ],
         child: const KetStrokeBankApp(),
       ),
@@ -189,13 +215,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _initializeAuth() async {
     if (!mounted) return;
-    
+
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       await authService.initAuthService();
-      
+
       if (!mounted) return;
-      
+
       setState(() {
         _initialized = true;
       });
@@ -211,7 +237,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }
     }
   }
-  
+
   void _toggleAuthScreen() {
     setState(() {
       _showLogin = !_showLogin;
@@ -221,11 +247,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   Widget build(BuildContext context) {
     if (!_initialized) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Selector<AuthService, bool>(

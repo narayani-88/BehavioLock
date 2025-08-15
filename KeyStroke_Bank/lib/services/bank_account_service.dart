@@ -57,6 +57,24 @@ class BankAccountService extends ChangeNotifier {
     try {
       _logger.info('Fetching accounts from API');
       
+      // Check if we have an auth token before making the request
+      _logger.info('About to fetch accounts - checking authentication status');
+      _logger.info('Auth token present: ${_apiService.hasAuthToken ? 'YES' : 'NO'}');
+      if (_apiService.hasAuthToken) {
+        final token = _apiService.authToken;
+        _logger.info('Auth token: ${token?.substring(0, 20)}...');
+      }
+      
+      // Check if user is authenticated before making the request
+      if (!_apiService.hasAuthToken) {
+        _logger.warning('No authentication token found - working in offline mode');
+        _accounts = [];
+        _error = null;
+        _isLoading = false;
+        _safeNotifyListeners();
+        return;
+      }
+      
       final response = await _apiService.get('/api/accounts');
       _logger.fine('Raw accounts API response type: ${response.runtimeType}');
       _logger.fine('Raw accounts API response: $response');
@@ -73,39 +91,71 @@ class BankAccountService extends ChangeNotifier {
         throw Exception(response);
       }
       
-      // At this point, response should be a Map<String, dynamic>
-      if (response['status'] == 'success') {
-        final accountsData = response['data'];
-        _logger.fine('Accounts data type: ${accountsData.runtimeType}');
-        _logger.fine('Accounts data: $accountsData');
-        
-        if (accountsData is List) {
-          _accounts = accountsData
-              .whereType<Map<String, dynamic>>()
-              .map((json) {
-                try {
-                  return BankAccount.fromMap(json);
-                } catch (e) {
-                  _logger.warning('Failed to parse account: $json', e);
-                  return null;
-                }
-              })
-              .whereType<BankAccount>()
-              .toList();
-          _logger.fine('Parsed accounts: $_accounts');
+      // Handle different response formats
+      if (response is Map<String, dynamic>) {
+        // Check if it's a direct accounts response (no status wrapper)
+        if (response.containsKey('accounts')) {
+          final accountsData = response['accounts'];
+          _logger.fine('Direct accounts data: $accountsData');
+          
+          if (accountsData is List) {
+            _accounts = accountsData
+                .whereType<Map<String, dynamic>>()
+                .map((json) {
+                  try {
+                    return BankAccount.fromMap(json);
+                  } catch (e) {
+                    _logger.warning('Failed to parse account: $json', e);
+                    return null;
+                  }
+                })
+                .whereType<BankAccount>()
+                .toList();
+            _logger.fine('Parsed accounts: $_accounts');
+          } else {
+            _logger.warning('Expected accounts data to be a list but got: ${accountsData.runtimeType}');
+            _accounts = [];
+          }
+        } else if (response['status'] == 'success') {
+          // Handle wrapped response format
+          final accountsData = response['data'];
+          _logger.fine('Wrapped accounts data: $accountsData');
+          
+          if (accountsData is List) {
+            _accounts = accountsData
+                .whereType<Map<String, dynamic>>()
+                .map((json) {
+                  try {
+                    return BankAccount.fromMap(json);
+                  } catch (e) {
+                    _logger.warning('Failed to parse account: $json', e);
+                    return null;
+                  }
+                })
+                .whereType<BankAccount>()
+                .toList();
+            _logger.fine('Parsed accounts: $_accounts');
+          } else {
+            _logger.warning('Expected accounts data to be a list but got: ${accountsData.runtimeType}');
+            _accounts = [];
+          }
         } else {
-          _logger.warning('Expected accounts data to be a list but got: ${accountsData.runtimeType}');
-          _accounts = [];
+          final errorMessage = response['message'] ?? response['error'] ?? 'Failed to load accounts';
+          _logger.warning('Failed to load accounts: $errorMessage');
+          throw Exception(errorMessage);
         }
       } else {
-        final errorMessage = response['message'] ?? 'Failed to load accounts';
-        _logger.warning('Failed to load accounts: $errorMessage');
-        throw Exception(errorMessage);
+        _logger.warning('Unexpected response format: ${response.runtimeType}');
+        _accounts = [];
       }
     } catch (e) {
       _error = 'Failed to load accounts: ${e.toString()}';
       _logger.severe('Error loading accounts', e);
-      rethrow;
+      
+      // Don't rethrow the exception - instead, set empty accounts and continue
+      // This allows the app to work even when the backend is not available
+      _accounts = [];
+      _logger.info('Setting empty accounts list due to API error - app will work in offline mode');
     } finally {
       _isLoading = false;
       _safeNotifyListeners();

@@ -171,8 +171,12 @@ class AuthService with ChangeNotifier {
       final token = prefs.getString(_tokenKey);
       
       if (token != null) {
-        _logger.fine('Found stored token, loading user data');
-        await _saveToken(token);
+        _logger.info('Found stored token, loading user data');
+        _token = token;
+        
+        // Set the token in the API service immediately
+        _apiService.setAuthToken(token);
+        _logger.info('Token set in API service: ${_apiService.hasAuthToken ? 'YES' : 'NO'}');
         
         // Load user data
         final userJson = prefs.getString(_userKey);
@@ -224,12 +228,13 @@ class AuthService with ChangeNotifier {
       _logger.fine('Attempting to register user: $email');
       
       final response = await _apiService.post(
-        '/api/auth/register',
+        '/api/auth/signup',
         data: {
-          'name': name,
+          'first_name': name.split(' ').first,
+          'last_name': name.split(' ').length > 1 ? name.split(' ').skip(1).join(' ') : '',
           'email': email,
           'password': password,
-          'phone_number': phoneNumber,
+          'phone': phoneNumber,
         },
       );
 

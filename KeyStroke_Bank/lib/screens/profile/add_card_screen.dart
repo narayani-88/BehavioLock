@@ -92,9 +92,17 @@ class _AddCardScreenState extends State<AddCardScreen>
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoadingBalance = false);
+        setState(() {
+          _totalAccountBalance = 0.0; // Default to 0 if loading fails
+          _isLoadingBalance = false;
+        });
+        // Show a more user-friendly message
         scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text('Failed to load account balance: $e')),
+          const SnackBar(
+            content: Text('Account balance unavailable - you can still add cards'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
         );
       }
     }
@@ -487,23 +495,28 @@ class _AddCardScreenState extends State<AddCardScreen>
     };
     if (!formKey.currentState!.validate()) return;
     
-    // Store context and mounted state before async operations
-    final navigatorContext = context;
-    final scaffoldMessenger = ScaffoldMessenger.of(navigatorContext);
+    // Create a flag to track if the operation was successful
+    bool isSuccess = false;
+    String? errorMessage;
+    
+    // Store the context before async operation
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
     
     try {
-      // Show loading indicator
-      showDialog(
-        context: navigatorContext,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-      
       // Get the card service and add the card
-      final cardService = Provider.of<CardService>(navigatorContext, listen: false);
+      final cardService = Provider.of<CardService>(context, listen: false);
       
+      // Execute the async operation
       await cardService.addCard(
         type: type,
         network: _network,
@@ -514,43 +527,40 @@ class _AddCardScreenState extends State<AddCardScreen>
         initialBalance: 0.0,
       );
       
-      // Close loading dialog
-      if (mounted) {
-        Navigator.pop(navigatorContext); // Close loading dialog
-      }
-      
+      // Set success flag
+      isSuccess = true;
+    } catch (e) {
+      // Set error message
+      errorMessage = e.toString();
+    }
+    
+    // After async operation, check if widget is still mounted
+    if (!mounted) return;
+    
+    // Close loading dialog
+    navigator.pop(); // Close loading dialog
+    
+    if (isSuccess) {
       // Show success message
-      if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: Text('$type card added successfully!'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('$type card added successfully!'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
       
       // Navigate to my cards page
-      if (mounted) {
-        Navigator.pushReplacementNamed(navigatorContext, '/my-cards');
-      }
-      
-    } catch (e) {
-      // Close loading dialog
-      if (mounted) {
-        Navigator.pop(navigatorContext); // Close loading dialog
-      }
-      
+      navigator.pushReplacementNamed('/my-cards');
+    } else {
       // Show error message
-      if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: Text('Failed to add card: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to add card: $errorMessage'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -567,6 +577,8 @@ class _AddCardScreenState extends State<AddCardScreen>
     switch (code) {
       case 'Amex':
         return 'American Express (Amex)';
+      case 'PayPal':
+        return 'PayPal';
       default:
         return code;
     }

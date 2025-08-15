@@ -5,6 +5,7 @@ import '../../models/card_model.dart';
 import 'add_card_screen.dart';
 import 'card_withdrawal_screen.dart';
 import 'add_money_to_card_screen.dart';
+import 'pay_by_card_screen.dart';
 
 class MyCardsScreen extends StatefulWidget {
   const MyCardsScreen({super.key});
@@ -39,16 +40,34 @@ class _MyCardsScreenState extends State<MyCardsScreen> {
             ),
           for (final card in cards) _GlassCard(card: card),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _onAddCard,
-              icon: const Icon(Icons.add),
-              label: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 14),
-                child: Text('ADD NEW CARD'),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _onAddCard,
+                  icon: const Icon(Icons.add),
+                  label: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    child: Text('ADD NEW CARD'),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _onPayByCard,
+                  icon: const Icon(Icons.payment),
+                  label: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    child: Text('PAY BY CARD'),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -71,6 +90,13 @@ class _MyCardsScreenState extends State<MyCardsScreen> {
           month: result.month,
           year: result.year,
         );
+  }
+
+  Future<void> _onPayByCard() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PayByCardScreen()),
+    );
   }
 }
 

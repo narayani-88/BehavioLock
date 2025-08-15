@@ -67,11 +67,20 @@ class ApiService {
   void setAuthToken(String? token) {
     if (token != null) {
       _dio.options.headers['Authorization'] = 'Bearer $token';
-      _logger.fine('Auth token set in API service');
+      _logger.info('Auth token set in API service: Bearer ${token.substring(0, 10)}...');
+      _logger.info('Headers after setting token: ${_dio.options.headers}');
     } else {
       _dio.options.headers.remove('Authorization');
-      _logger.fine('Auth token removed from API service');
+      _logger.info('Auth token removed from API service');
     }
+  }
+  
+  bool get hasAuthToken {
+    return _dio.options.headers['Authorization'] != null;
+  }
+  
+  String? get authToken {
+    return _dio.options.headers['Authorization'] as String?;
   }
   
   // Method to set the auth service after initialization
@@ -129,7 +138,10 @@ class ApiService {
   }
 
   Future<dynamic> get(String endpoint, {Map<String, dynamic>? queryParameters}) async {
-    _logger.fine('GET $endpoint');
+    _logger.info('GET $endpoint');
+    _logger.info('Base URL: ${_dio.options.baseUrl}');
+    _logger.info('Full URL: ${_dio.options.baseUrl}$endpoint');
+    _logger.info('Request headers: ${_dio.options.headers}');
     return _makeRequest(
       () => _dio.get<dynamic>(
         endpoint,

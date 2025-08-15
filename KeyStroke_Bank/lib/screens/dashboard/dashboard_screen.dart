@@ -17,6 +17,7 @@ import 'package:ket_stroke_bank/screens/qr/qr_generation_screen.dart';
 import 'package:ket_stroke_bank/screens/qr/qr_scanner_screen.dart';
 import 'package:ket_stroke_bank/screens/profile/personal_information_screen.dart';
 import 'package:ket_stroke_bank/screens/profile/my_cards_screen.dart';
+import 'package:ket_stroke_bank/screens/profile/pay_by_card_screen.dart';
 import 'package:ket_stroke_bank/screens/profile/transaction_history_screen.dart';
 import 'package:ket_stroke_bank/screens/profile/settings_screen.dart';
 import 'package:ket_stroke_bank/screens/profile/help_support_screen.dart';
@@ -65,7 +66,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final context = this.context;
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error loading data: ${e.toString()}')),
+            const SnackBar(
+              content: Text('Some data may be unavailable - app will work in offline mode'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
           );
         }
       }
@@ -245,7 +250,8 @@ class _HomeTabState extends State<_HomeTab> {
         await bankAccountService.initialize();
       } catch (e) {
         _logger.severe('Error initializing services', e);
-        rethrow;
+        // Don't rethrow - let the app continue with empty data
+        return;
       }
       
       if (mounted) {
@@ -254,9 +260,13 @@ class _HomeTabState extends State<_HomeTab> {
     } catch (e) {
       _logger.severe('Error loading data', e);
       if (mounted) {
-        // Show error to user if needed
+        // Show a more user-friendly message
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to load data')),
+          const SnackBar(
+            content: Text('Some data may be unavailable - app will work in offline mode'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
         );
       }
     }
@@ -270,10 +280,14 @@ class _HomeTabState extends State<_HomeTab> {
       _logger.severe('Error during refresh', e);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to refresh data')),
+          const SnackBar(
+            content: Text('Refresh failed - some data may be unavailable'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
         );
       }
-      rethrow;
+      // Don't rethrow - let the refresh complete
     }
   }
 
@@ -973,75 +987,100 @@ class _HomeTabState extends State<_HomeTab> {
                   ),
                 ],
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
+              child: Column(
                 children: [
-                  _buildActionButton(
-                    'Send',
-                    Icons.arrow_upward,
-                    () {
-                      // Navigate to transfer money screen with withdrawal type pre-selected
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => AddTransactionScreen(
-                            // Pre-select withdrawal transaction type
-                            initialTransactionType: TransactionType.withdrawal,
-                          ),
-                        ),
-                      );
-                    },
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildActionButton(
+                        'Send',
+                        Icons.arrow_upward,
+                        () {
+                          // Navigate to transfer money screen with withdrawal type pre-selected
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => AddTransactionScreen(
+                                // Pre-select withdrawal transaction type
+                                initialTransactionType: TransactionType.withdrawal,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildActionButton(
+                        'Request',
+                        Icons.arrow_downward,
+                        () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const QRGenerationScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildActionButton(
+                        'Transfer',
+                        Icons.swap_horiz,
+                        () {
+                          // Store context in a local variable to use after async gap
+                          final currentContext = context;
+                          
+                          Navigator.push(
+                            currentContext,
+                            MaterialPageRoute(
+                              builder: (context) => AddTransactionScreen(
+                                // Pre-select transfer transaction type
+                                initialTransactionType: TransactionType.transfer,
+                              ),
+                            ),
+                          ).then((_) {
+                            // Refresh the dashboard when returning from transfer screen
+                            if (!currentContext.mounted) return;
+                            
+                            final transactionService = Provider.of<TransactionService>(
+                              currentContext, 
+                              listen: false
+                            );
+                            transactionService.initialize();
+                          });
+                        },
+                      ),
+                      _buildActionButton(
+                        'QR Scan',
+                        Icons.qr_code_scanner,
+                        () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const QRScannerScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  _buildActionButton(
-                    'Request',
-                    Icons.arrow_downward,
-                    () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const QRGenerationScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildActionButton(
-                    'Transfer',
-                    Icons.swap_horiz,
-                    () {
-                      // Store context in a local variable to use after async gap
-                      final currentContext = context;
-                      
-                      Navigator.push(
-                        currentContext,
-                        MaterialPageRoute(
-                          builder: (context) => AddTransactionScreen(
-                            // Pre-select transfer transaction type
-                            initialTransactionType: TransactionType.transfer,
-                          ),
-                        ),
-                      ).then((_) {
-                        // Refresh the dashboard when returning from transfer screen
-                        if (!currentContext.mounted) return;
-                        
-                        final transactionService = Provider.of<TransactionService>(
-                          currentContext, 
-                          listen: false
-                        );
-                        transactionService.initialize();
-                      });
-                    },
-                  ),
-                  _buildActionButton(
-                    'QR Scan',
-                    Icons.qr_code_scanner,
-                    () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const QRScannerScreen(),
-                        ),
-                      );
-                    },
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildActionButton(
+                        'Pay by Card',
+                        Icons.payment,
+                        () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const PayByCardScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 80), // Spacer for centering
+                      const SizedBox(width: 80), // Spacer for centering
+                      const SizedBox(width: 80), // Spacer for centering
+                    ],
                   ),
                 ],
               ),
